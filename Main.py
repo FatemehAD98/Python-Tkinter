@@ -8,6 +8,7 @@ import threading
 import time
 import re
 import winsound
+import os
 from PIL import Image, ImageTk,ImageFilter
 
 class MyGUI:
@@ -112,13 +113,6 @@ class MyGUI:
         self.enter_time.place(x=950, y=185)
         self.enter_time_label.place(x=795, y=185)
 
-
-        # check button for creating excel file
-        option2_var = tk.BooleanVar()
-        option2_cb = tk.Checkbutton(root, text="ایجاد فایل اکسل روز", variable=option2_var, font=("Calibri", 15),
-                                    command=self.excel)
-        option2_cb.place(x=1150, y=50)
-
         # Create a canvas for the scrollable content
         self.canvas = tk.Canvas(self.root, bd=2, relief=tk.SUNKEN, width=350, height=300, bg='White')
         self.canvas.pack(side=tk.LEFT, fill=tk.Y)
@@ -159,6 +153,11 @@ class MyGUI:
         self.button.place(x=900, y=580)
 
     def entry_save(self):
+        self.current_date = date.today()
+        self.date_string = self.current_date.strftime('%Y-%m-%d')
+        if not os.path.exists(self.date_string + ".xlsx"):
+           self.excel()
+
         # Get the value_game from the entry widget and append it to the list
         self.nameVlue = self.nameEntry.get()
         self.SystemTimeValue = self.enter_time_label.cget("text")
@@ -242,23 +241,15 @@ class MyGUI:
         # Create a top toolbar frame
         toolbar = tk.Frame(box, bg='white', height=30)
         toolbar.pack(side=tk.TOP, fill=tk.X)
-
         # Create the first icon label
         icon1 = tk.Label(toolbar, image=self.cancel, state=tk.DISABLED)
-        icon1.pack(side=tk.LEFT, padx=5, pady=2)
-
+        icon1.pack(side=tk.RIGHT, padx=5, pady=2)
         # Create the second icon label
         icon2 = tk.Label(toolbar, image=self.alarm, state=tk.DISABLED)
         icon2.pack(side=tk.LEFT, padx=5, pady=2)
-
-
-
         tk.Label(box, text="اسم: "+ name, width=50, anchor='e', font=("Arial", 15, "bold")).pack()
         tk.Label(box, text="ساعت ورود: "+ enter, width=50,anchor='e',font=("Arial", 15,"bold")).pack()
         tk.Label(box, text= "ساعت خروج: "+ exit, width=50,anchor='e',font=("Arial", 15,"bold")).pack()
-        tk.Label(box, text="تاخیر: ", width=50, anchor='e', font=("Arial", 15, "bold")).pack()
-
-
         self.canvas.update_idletasks()
         self.canvas.configure(scrollregion=self.canvas.bbox('all'))
 
@@ -290,7 +281,6 @@ class MyGUI:
 
                                 break
 
-
             time.sleep(60 - datetime.now().second)  # wait until the next minute starts
 
     def time_pattern(self,text):
@@ -309,10 +299,6 @@ class MyGUI:
         datetime2 = datetime.strptime(current_time, time_format)
         # Calculate difference in minutes
         diff_minutes = int((datetime2 - datetime1).total_seconds() // 60)
-        # Convert difference to "H:M" format
-        # diff_hours = diff_minutes // 60
-        # diff_minutes %= 60
-        # diff_str = f"{int(diff_hours):02d}:{int(diff_minutes):02d}"
         for child in self.frame.winfo_children():
             if isinstance(child, tk.Frame):
                 for label in child.winfo_children():
