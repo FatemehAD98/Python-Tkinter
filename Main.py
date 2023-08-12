@@ -9,6 +9,15 @@ import time
 import re
 import winsound
 import os
+import tkinter as tk
+import sounddevice as sd
+import wavio
+import pythoncom
+from tkinter import PhotoImage
+from pycaw.pycaw import AudioUtilities, ISimpleAudioVolume
+from pydub import AudioSegment
+from pydub.playback import play
+
 from PIL import Image, ImageTk,ImageFilter
 
 class MyGUI:
@@ -17,8 +26,9 @@ class MyGUI:
         self.root = root
         self.root.geometry("2100x1000")
         self.root.title("ستاره ها")
+        # Load the image
 
-
+        root.config(bg="#FFE1FF")
 
         self.tk=tk
         self.value_list=[]
@@ -28,11 +38,37 @@ class MyGUI:
 
 
         self.title_list(":اسم", 1280, 100)
-        self.title_list(":ساعت ورود", 1200, 180)
+        # self.title_list(":ساعت ورود", 1200, 180)
+        self.title_list(":تعداد افراد", 1210, 180)
         self.title_list(":وسیله بازی", 1210, 260)
         self.title_list(":عینک", 1260, 340)
         self.title_list(":کل تایم", 1250, 420)
         self.title_list(":مبلغ قابل پرداخت", 1150, 500)
+
+        self.counter = 0
+        self.repetitions = 0
+        self.is_recording = False
+
+        self.vlc_process_name = "vlc.exe"  # Adjust this if your VLC process name is different
+        self.volume_range = [0.0, 1.0]  # Adjust the volume range if necessary
+
+        #create entry number for تعداد بچه ها
+        self.value_number_child = tk.IntVar(value=1)
+        self.frame_number_child = tk.Frame()
+        self.frame_number_child.place(x=900,y=160)
+        # Create the widgets
+        self.minus_button = tk.Button(self.frame_number_child, text='-', command=self.decrease_value_number, width=3,
+                                      font=('Arial', 14, 'bold'))
+        self.minus_button.pack(side=tk.LEFT)
+
+        self.label_game = tk.Label(self.frame_number_child, textvariable=self.value_number_child, width=10, font=('Arial', 14))
+        self.label_game.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+        self.plus_button = tk.Button(self.frame_number_child, text='+', command=self.increase_value_number, width=3,
+                                     font=('Arial', 14, 'bold'))
+        self.plus_button.pack(side=tk.LEFT)
+
+
 
 
         #create entry number for وسیله بازی
@@ -72,8 +108,6 @@ class MyGUI:
         self.plus_button.pack(side=tk.LEFT)
 
 
-
-
         # create entry number for  کل تایم
         self.time = datetime.strptime("00:00", "%H:%M")  # Set initial time to 00:00
         self.value_total_time = tk.StringVar(value=self.time.strftime("%H:%M"))  # Create a string variable to display the time
@@ -93,25 +127,14 @@ class MyGUI:
         self.plus_button.pack(side=tk.LEFT)
 
 
-
         # create an entry widget for user input
         my_font = ("Calibri", 15)  # Set the font family and size
         self.nameEntry=self.tk.Entry(self.root, width=25, font=my_font)
         self.nameEntry.place(x=920, y=110)
 
-
-
-
-        # Create the label to display the time
-        self.enter_time_label = tk.Label(self.root, font=('Arial', 24))
-        # Create two BooleanVar objects to store the state of the check buttons
-        self.check_var = tk.IntVar()
-        # Create the check buttons and associate them with the BooleanVar objects
-        self.enter_time = tk.Checkbutton(root, text="ساعت سیستم", variable=self.check_var, font=("Calibri", 15),
-                                         command=self.save_time)
-        # Pack the check buttons into the window
-        self.enter_time.place(x=950, y=185)
-        self.enter_time_label.place(x=795, y=185)
+        # Create the recording button
+        record_button = tk.Button(self.root, text="ضبط صدا", command=self.start_recording)
+        record_button.place(x=700, y=110)
 
         # Create a canvas for the scrollable content
         self.canvas = tk.Canvas(self.root, bd=2, relief=tk.SUNKEN, width=350, height=300, bg='White')
@@ -152,6 +175,18 @@ class MyGUI:
         # pack the button into the root window
         self.button.place(x=900, y=580)
 
+    def start_recording(self ):
+        # Set the recording parameters
+        duration = 5  # Recording duration in seconds
+        self.sample_rate = 44100  # Sample rate (number of samples per second)
+        channels = 2  # Number of audio channels (2 for stereo)
+
+        # Record audio
+        self.recording = sd.rec(int(duration * self.sample_rate), samplerate=self.sample_rate, channels=channels)
+        sd.wait()
+
+        return self.recording
+
     def entry_save(self):
         self.current_date = date.today()
         self.date_string = self.current_date.strftime('%Y-%m-%d')
@@ -160,17 +195,87 @@ class MyGUI:
 
         # Get the value_game from the entry widget and append it to the list
         self.nameVlue = self.nameEntry.get()
-        self.SystemTimeValue = self.enter_time_label.cget("text")
+        # self.SystemTimeValue = self.enter_time_label.cget("text")
         self.gameValue=self.label_game.cget("text")
         self.glassValue=self.label_glass.cget("text")
         self.ToalTimeValue=self.label_time.cget("text")
-        self.CostValue=self.sum_lbl.cget("text")
+
+        #check empety inputs
+        warning = False
+        if not self.nameVlue :
+            # show an error message or return from the function
+            if not warning:
+                warning = True
+                popup = tk.Toplevel()
+                popup.title("هشدار")
+                popup.geometry("400x300")
+                # Disable main window
+                root.attributes("-disabled", True)
+                # Disable close button
+                popup.protocol("WM_DELETE_WINDOW", lambda: None)
+                text = "لطفا همه ی ورودی ها را وارد کنید "
+                label = tk.Label(popup, text=text)
+                label.pack(padx=10, pady=10)
+
+                def remove():
+                    # Enable main window
+                    root.attributes("-disabled", False)
+                    # Close popup window
+                    popup.destroy()
+                    # Perform action
+                    self.show_warning = False
+
+                continue_button = tk.Button(popup, text="تایید", command=remove)
+                continue_button.pack(padx=10, pady=10)
+
+        if warning:
+            return
+
+        self.CostValue = self.sum_lbl.cget("text")
+
+        # Check for repetitious names
+        show_warning = False
+        for child in self.frame.winfo_children():
+            if isinstance(child, tk.Frame):
+                for label in child.winfo_children():
+                    if isinstance(label, tk.Label) and label.cget('text') == "اسم: " + self.nameVlue:
+                        if not show_warning:
+                            show_warning = True
+                            popup = tk.Toplevel()
+                            popup.title("هشدار")
+                            popup.geometry("400x300")
+                            # Disable main window
+                            root.attributes("-disabled", True)
+                            # Disable close button
+                            popup.protocol("WM_DELETE_WINDOW", lambda: None)
+                            text = "کودک با این نام در محل بازی وجود دارد .اسم جدید انتخاب کنید "
+                            label = tk.Label(popup, text=text)
+                            label.pack(padx=10, pady=10)
+
+                            def remove():
+                                # Enable main window
+                                root.attributes("-disabled", False)
+                                # Close popup window
+                                popup.destroy()
+                                # Perform action
+                                self.show_warning = False
+
+                            continue_button = tk.Button(popup, text="تایید", command=remove)
+                            continue_button.pack(padx=10, pady=10)
+
+        if show_warning:
+            return
+
 
         #calculate exite time
-        self.dt_sum=self.exit_time(self.SystemTimeValue , self.ToalTimeValue)
+        self.current_time = datetime.now().strftime('%H:%M')
+        time_format = "%H:%M"
+        # Convert clocks to datetime objects
+
+        self.dt_sum=self.exit_time(self.current_time , self.ToalTimeValue)
         self.exitTime=self.dt_sum.strftime("%H:%M")
 
-        self.lst = [self.nameVlue,self.SystemTimeValue , self.gameValue,
+        self.lst = [self.nameVlue,self.current_time , self.gameValue,
                     self.glassValue ,self.ToalTimeValue, self.CostValue]
 
         for i in self.lst:
@@ -189,15 +294,24 @@ class MyGUI:
             self.worksheet.append(row)
         self.workbook.save(self.date_string + ".xlsx")
 
+        #VOICE RECORD
+        self.add_box_waiting_list(self.nameVlue , self.exitTime)
+        # Save the recording to a WAV file
+        wavio.write(str(self.counter)+".wav", self.recording, self.sample_rate, sampwidth=2)
 
-        # dictionary
-        # self.dt = datetime.strptime(self.lst[1], '%H:%M')
-        # self.time_formatted = self.dt.strftime("%H:%M")
-        # new_time = self.dt + timedelta(minutes=int(lst[1]))
-        # self.my_dict.update({self.lst[0]: self.time_formatted})
-        self.add_box_waiting_list(self.nameVlue , self.SystemTimeValue , self.exitTime)
         self.value_list.clear()
         self.list_of_lists.clear()
+        #reset all inputs
+        self.nameEntry.delete(0, 'end')
+        self.label_game.config(text="")
+
+        self.value_number_child.set(1)
+        self.value_game.set(0)
+        self.value_glass.set(0)
+        self.value_total_time.set("00:00")
+        self.sum_lbl.config(text="0 تومان")
+
+
 
     def exit_time(self, enterTime , totalTime):
         # convert the time strings to datetime objects
@@ -233,11 +347,13 @@ class MyGUI:
         # Save the workbook
         self.workbook.save(self.date_string + ".xlsx")
 
-    def add_box_waiting_list(self, name, enter, exit):
+
+
+
+    def add_box_waiting_list(self, name, exit):
+        self.counter += 1
         box = tk.Frame(self.frame, bd=2, relief=tk.RIDGE, bg='blue', height=100, width=self.canvas.winfo_width())
         box.pack(padx=0, pady=0, fill=tk.BOTH, expand=True)
-        # icon_alarm_label = tk.Label(box, image=self.alarm)
-        # icon_alarm_label.pack(side=tk.TOP, anchor="se")
         # Create a top toolbar frame
         toolbar = tk.Frame(box, bg='white', height=30)
         toolbar.pack(side=tk.TOP, fill=tk.X)
@@ -248,10 +364,12 @@ class MyGUI:
         icon2 = tk.Label(toolbar, image=self.alarm, state=tk.DISABLED)
         icon2.pack(side=tk.LEFT, padx=5, pady=2)
         tk.Label(box, text="اسم: "+ name, width=50, anchor='e', font=("Arial", 15, "bold")).pack()
-        tk.Label(box, text="ساعت ورود: "+ enter, width=50,anchor='e',font=("Arial", 15,"bold")).pack()
+        # tk.Label(box, text="ساعت ورود: "+ enter, width=50,anchor='e',font=("Arial", 15,"bold")).pack()
         tk.Label(box, text= "ساعت خروج: "+ exit, width=50,anchor='e',font=("Arial", 15,"bold")).pack()
+        tk.Label(box, text="شماره: " + str(self.counter), width=50, anchor='e', font=("Arial", 15, "bold")).pack()
         self.canvas.update_idletasks()
         self.canvas.configure(scrollregion=self.canvas.bbox('all'))
+
 
 
     def on_canvas_configure(self, event):
@@ -267,6 +385,14 @@ class MyGUI:
                             current_time_exit = datetime.now().strftime('%H:%M')
                             if isinstance(label, tk.Label) and label.cget('text') == "ساعت خروج: " + current_time_exit:
                                 timeExitPattern=self.time_pattern(label.cget("text"))
+                                #get third lable in child ( شماره =؟)
+                                label_count = 0
+                                for child_label in child.winfo_children():
+                                    if isinstance(child_label, tk.Label):
+                                        label_count += 1
+                                        if label_count == 3:
+                                            string=child_label.cget('text')
+                                            number = ''.join(filter(str.isdigit, string))
 
                                 # Enable icon1 and icon2 labels
                                 icon1 = child.winfo_children()[0].winfo_children()[0]
@@ -276,8 +402,8 @@ class MyGUI:
                                 icon2.config(state=tk.NORMAL)
                                 icon2.bind("<Button-1>", lambda event: self.stop_alarm())
 
-                                child.configure(bg="red" )
-                                self.play_sound()
+                                child.configure(bg="red" ,borderwidth=8 )
+                                self.play_sound(number)
 
                                 break
 
@@ -332,18 +458,52 @@ class MyGUI:
             # Perform action
 
         continue_button = tk.Button(popup, text="Continue", command=continue_action)
-        continue_button.pack(side="left", padx=10, pady=10)
+        continue_button.pack(side="left", padx=10, pady=50)
 
         def remove_action():
             # Enable main window
             root.attributes("-disabled", False)
             # Destroy the child of the frame
             child.destroy()
+            self.stop_alarm()
             # Close popup window
             popup.destroy()
 
-        cancel_button = tk.Button(popup, text="Cancel", command=remove_action)
-        cancel_button.pack(side="right", padx=10, pady=10)
+        cancel_button = tk.Button(popup, text="حذف", command=remove_action)
+        cancel_button.pack(side="right", padx=10, pady=50)
+
+        def tamdid1():
+            x=strCostDelay+"15000"
+            text2 = "مبلغ قابل پرداخت:  " + x
+            label = tk.Label(popup, text=text2)
+            label.pack(padx=10, pady=10)
+        def tamdid2():
+            x=strCostDelay+"25000"
+            text2 = "مبلغ قابل پرداخت:  " + x
+            label = tk.Label(popup, text=text2)
+            label.pack(padx=10, pady=10)
+        def tamdid3():
+            x=strCostDelay+"15000"
+            text2 = "مبلغ قابل پرداخت:  " + x
+            label = tk.Label(popup, text=text2)
+            label.pack(padx=10, pady=10)
+
+        self.frame_tamdid = tk.Frame(popup)
+        self.frame_tamdid.place(x=120, y=160)
+        # Create the widgets
+        self.minus_button = tk.Button(self.frame_tamdid, text="تمدید1", command=tamdid1, width=4,
+                                      font=('Arial', 14 ))
+        self.minus_button.pack(side=tk.LEFT)
+
+        self.x = tk.Button(self.frame_tamdid,  text="تمدید2", command=tamdid2, width=4,
+                                      font=('Arial', 14))
+        self.x.pack(side=tk.LEFT)
+
+        self.plus_button = tk.Button(self.frame_tamdid, text="تمدید3", command=tamdid3, width=4,
+                                     font=('Arial', 14))
+        self.plus_button.pack(side=tk.LEFT)
+
+
 
     def round_to_nearest_5(self,num):
         remainder = num % 5
@@ -356,11 +516,81 @@ class MyGUI:
             cost = (y // 5) * 5000
             return cost
 
-    def play_sound(self):
-        # Play the sound file and schedule it to play again after 1 second
-        winsound.PlaySound('sound.wav', winsound.SND_FILENAME)
-        global sound_id
-        sound_id = root.after(1000, self.play_sound)
+    #ALL FUNCTIONS ABOUT VOICES AND CONTROL VLC MUSIC PLAYER
+    def decrease_volume(self, volume):
+        pythoncom.CoInitialize()  # Initialize the COM library
+        sessions = AudioUtilities.GetAllSessions()
+        for session in sessions:
+            volume_interface = session._ctl.QueryInterface(ISimpleAudioVolume)
+            process = session.Process
+            if process and process.name():
+                process_name = process.name()
+                if self.vlc_process_name.lower() in process_name.lower():
+                    volume_interface.SetMasterVolume(volume, None)
+        pythoncom.CoUninitialize()  # Uninitialize the COM library
+
+    def restore_volume(self):
+        pythoncom.CoInitialize()  # Initialize the COM library
+        sessions = AudioUtilities.GetAllSessions()
+        for session in sessions:
+            volume_interface = session._ctl.QueryInterface(ISimpleAudioVolume)
+            process = session.Process
+            if process and process.name():
+                process_name = process.name()
+                if self.vlc_process_name.lower() in process_name.lower():
+                    volume_interface.SetMasterVolume(1.0, None)
+        pythoncom.CoUninitialize()  # Uninitialize the COM library
+
+    def decrease_volume_and_restore(self, voice_duration):
+        # Decrease the volume
+        self.decrease_volume(0.0001)  # Adjust the desired decreased volume level
+
+        # Wait for the voice to finish playing
+        time.sleep(voice_duration)
+
+        # Restore the volume to normal
+        self.restore_volume()
+
+    # def play_sound(self , number):
+    #
+    #     # Code to play the voice
+    #     voice_duration = 15  # Adjust the actual duration of the voice in seconds
+    #     # Decrease volume in a separate thread
+    #     volume_thread = threading.Thread(target=self.decrease_volume_and_restore, args=(voice_duration,))
+    #     volume_thread.start()
+    #     if self.repetitions >= 2:
+    #         return
+    #     # Play the sound file and schedule it to play again after 1 second
+    #     winsound.PlaySound(number+'.wav', winsound.SND_FILENAME)
+    #
+    #     self.repetitions += 1
+    #     global sound_id
+    #     sound_id = root.after(10, self.play_sound , number)
+    def play_sound(self, number):
+        if self.is_recording:
+            # If recording is in progress, wait until it finishes before playing a new sound
+            while self.is_recording:
+                time.sleep(0.1)
+
+        def play_sound_thread():
+            self.is_recording = True
+            voice_duration = 15  # Adjust the actual duration of the voice in seconds
+            # Decrease volume in a separate thread
+            volume_thread = threading.Thread(target=self.decrease_volume_and_restore, args=(voice_duration,))
+            volume_thread.start()
+            if self.repetitions >= 2:
+                self.is_recording = False
+                return
+            # Play the sound file and schedule it to play again after 1 second
+            winsound.PlaySound(str(number) + '.wav', winsound.SND_FILENAME)
+
+            self.repetitions += 1
+            sound_id = root.after(10, play_sound_thread)
+
+        # Start playing the sound in a separate thread
+        play_thread = threading.Thread(target=play_sound_thread)
+        play_thread.start()
+
 
     def stop_alarm(self):
         global sound_id
@@ -392,6 +622,18 @@ class MyGUI:
             # self.sum_costs((self.value_game.get()*7000),(self.value_glass.get()*25000) )
 
 
+    def decrease_value_number(self):
+        self.val= self.value_number_child.get() - 1
+        if self.val>1:
+            self.value_number_child.set(self.val)
+            self.total_time_if()
+            # self.sum_costs((self.value_game.get()*7000),(self.value_glass.get()*25000) )
+        else:
+            self.value_number_child.set(1)
+            self.total_time_if()
+            # self.sum_costs((self.value_game.get()*7000),(self.value_glass.get()*25000) )
+
+
 
     def increase_value_game(self):
         self.value_game.set(self.value_game.get() + 1)
@@ -403,13 +645,23 @@ class MyGUI:
         self.total_time_if()
         # self.sum_costs((self.value_game.get()*7000),(self.value_glass.get()*25000) )
 
+    def increase_value_number(self):
+        self.value_number_child.set(self.value_number_child.get() + 1)
+        self.total_time_if()
+        # self.sum_costs((self.value_game.get()*7000),(self.value_glass.get()*25000) )
+
 
 
     def add_time(self):
         self.time += timedelta(minutes=1)  # Increment time by 30 minutes
         # Update the string variable with the new time
-        self.value_total_time.set(self.time.strftime("%H:%M"))
-        self.total_time_if()
+        if self.time<=datetime.strptime("03:00", "%H:%M"):
+             self.value_total_time.set(self.time.strftime("%H:%M"))
+             self.total_time_if()
+        else:
+            self.time=datetime.strptime("03:00", "%H:%M")
+            self.total_time_if()
+
 
 
     def minus_time(self):
@@ -425,23 +677,23 @@ class MyGUI:
 
     def total_time_if(self):
         if self.value_total_time.get() == "00:00":
-            self.sum_costs((self.value_game.get() * 7000), (self.value_glass.get() * 25000), 0)
+            self.sum_costs((self.value_game.get() * 10000), (self.value_glass.get() * 25000), 0)
         elif self.value_total_time.get() == "00:30":
-            self.sum_costs((self.value_game.get() * 7000), (self.value_glass.get() * 25000), 25000)
+            self.sum_costs((self.value_game.get() * 10000), (self.value_glass.get() * 25000), (25000*self.value_number_child.get()))
         elif self.value_total_time.get() == "01:00":
-            self.sum_costs((self.value_game.get() * 7000), (self.value_glass.get() * 25000), 40000)
+            self.sum_costs((self.value_game.get() * 10000), (self.value_glass.get() * 25000), (40000*self.value_number_child.get()))
         elif self.value_total_time.get() == "01:30":
-            self.sum_costs((self.value_game.get() * 7000), (self.value_glass.get() * 25000), 65000)
+            self.sum_costs((self.value_game.get() * 10000), (self.value_glass.get() * 25000), (65000*self.value_number_child.get()))
         elif self.value_total_time.get() == "02:00":
-            self.sum_costs((self.value_game.get() * 7000), (self.value_glass.get() * 25000), 80000)
+            self.sum_costs((self.value_game.get() * 10000), (self.value_glass.get() * 25000), (80000*self.value_number_child.get()))
         elif self.value_total_time.get() == "02:30":
-            self.sum_costs((self.value_game.get() * 7000), (self.value_glass.get() * 25000), 105000)
+            self.sum_costs((self.value_game.get() * 10000), (self.value_glass.get() * 25000), (105000*self.value_number_child.get()))
         elif self.value_total_time.get() == "03:00":
-            self.sum_costs((self.value_game.get() * 7000), (self.value_glass.get() * 25000), 120000)
+            self.sum_costs((self.value_game.get() * 10000), (self.value_glass.get() * 25000), (120000*self.value_number_child.get()))
 
 
 
-    def sum_costs(self, game, glass ,costTime):
+    def sum_costs(self, game, glass ,costTime ):
         self.sum=game+glass+costTime
         self.finalSum=self.to_persian_string(self.sum)
         if hasattr(self, 'sum_lbl'):
@@ -461,6 +713,8 @@ class MyGUI:
         # Add the "تومان" suffix to the end of the string
         cost_str = cost_str+"تومان"
         return cost_str
+
+
 
 root = tk.Tk()
 gui = MyGUI(root)
